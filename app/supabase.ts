@@ -1,7 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 
-export const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-export const SUPABASE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
+export const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+  ?? "https://svzgnsyjqywckdvdlzsl.supabase.co";
+export const SUPABASE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+  ?? "sb_publishable_HGyJQLaomek4W7W9-JN36g_MfUY85pM";
 export const SUPABASE_AUTH_OPTIONS = Object.freeze({
   persistSession: true,
   autoRefreshToken: true,
