@@ -1,197 +1,64 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, Brain, Check, ChevronRight, CircleUserRound, CloudMoon, Ellipsis, Feather, Heart, Lightbulb, LockKeyhole, Menu, MessageCircle, Mic, Moon, Plus, Search, Send, Settings, Sparkles, Target, Trash2, TrendingUp, WalletCards, X } from "lucide-react";
-import { lucyData } from "./lucy-data";
+import { useCallback,useEffect,useRef,useState } from "react";
+import { ArrowLeft,BookOpen,Brain,Check,ChevronRight,CircleUserRound,CloudMoon,Ellipsis,Feather,Heart,Lightbulb,LockKeyhole,Menu,MessageCircle,Mic,Moon,Pencil,Plus,Send,Settings,Sparkles,Target,Trash2,TrendingUp,WalletCards,X } from "lucide-react";
+import { inPeriod,lucyData,type LucyDataSet,type Period } from "./lucy-data";
 
-type Tab = "lucy" | "diario" | "suenos" | "memoria" | "objetivos" | "vida" | "perfil" | "mas";
-type Data = { messages: any[]; entries: any[]; dreams: any[]; memories: any[]; goals: any[]; observations: any[] };
-const EMPTY: Data = { messages: [], entries: [], dreams: [], memories: [], goals: [], observations: [] };
+type Tab="lucy"|"diario"|"suenos"|"memoria"|"objetivos"|"vida"|"finanzas"|"perfil"|"mas";
+const EMPTY:LucyDataSet={messages:[],entries:[],dreams:[],interpretations:[],memories:[],goals:[],observations:[],profile:null};
+const mainTabs=[{id:"lucy" as Tab,label:"Lucy",icon:MessageCircle},{id:"diario" as Tab,label:"Diario",icon:BookOpen},{id:"suenos" as Tab,label:"Sueños",icon:Moon},{id:"vida" as Tab,label:"Mi vida",icon:Sparkles},{id:"mas" as Tab,label:"Más",icon:Ellipsis}];
+const titles:Record<Tab,[string,string]>={lucy:["Lucy","Aquí para escucharte"],diario:["Diario","Tu historia, día a día"],suenos:["Sueños","Explora tu mundo interior"],memoria:["Memoria de Lucy","Lo importante, siempre contigo"],objetivos:["Objetivos","Pequeños pasos, grandes cambios"],vida:["Mi vida","Conoce tus patrones"],finanzas:["Finanzas","Tus ingresos y gastos cotidianos"],perfil:["Mi perfil","Tu espacio, a tu manera"],mas:["Más","Todo en un solo lugar"]};
+const today=()=>new Date().toISOString().slice(0,10);
+function prettyDate(value?:string){if(!value)return"Hoy";return new Intl.DateTimeFormat("es-BO",{day:"numeric",month:"short",year:"numeric"}).format(new Date(value+(value.length===10?"T12:00:00":"")));}
+function metadata(o:any){return typeof o?.metadata==="string"?JSON.parse(o.metadata||"{}"):o?.metadata||{};}
 
-const tabs = [
-  { id: "lucy" as Tab, label: "Lucy", icon: MessageCircle },
-  { id: "diario" as Tab, label: "Diario", icon: BookOpen },
-  { id: "suenos" as Tab, label: "Sueños", icon: Moon },
-  { id: "vida" as Tab, label: "Mi vida", icon: Sparkles },
-  { id: "mas" as Tab, label: "Más", icon: Ellipsis },
-];
-const titles: Record<Tab, [string, string]> = {
-  lucy: ["Lucy", "Aquí para escucharte"],
-  diario: ["Diario", "Tu historia, día a día"],
-  suenos: ["Sueños", "Explora tu mundo interior"],
-  memoria: ["Memoria de Lucy", "Lo importante, siempre contigo"],
-  objetivos: ["Objetivos", "Pequeños pasos, grandes cambios"],
-  vida: ["Mi vida", "Conoce tus patrones"],
-  perfil: ["Mi perfil", "Tu espacio, a tu manera"],
-  mas: ["Más", "Todo en un solo lugar"],
-};
-
-function prettyDate(value?: string) {
-  if (!value) return "Hoy";
-  return new Intl.DateTimeFormat("es-BO", { day: "numeric", month: "short", year: "numeric" }).format(new Date(value + (value.length === 10 ? "T12:00:00" : "")));
+export default function LucyApp({user,onSignOut}:{user:{name:string;email:string};onSignOut:()=>Promise<unknown>}){
+ const [tab,setTab]=useState<Tab>("lucy"),[history,setHistory]=useState<Tab[]>([]),[data,setData]=useState<LucyDataSet>(EMPTY),[text,setText]=useState(""),[loading,setLoading]=useState(true),[sending,setSending]=useState(false),[notice,setNotice]=useState(""),[listening,setListening]=useState(false);const endRef=useRef<HTMLDivElement>(null);
+ const load=useCallback(async()=>{try{setData(await lucyData.load());setNotice("");}catch{setNotice("No pude cargar tus registros. Intenta nuevamente.");}finally{setLoading(false);}},[]);
+ useEffect(()=>{void load();},[load]);useEffect(()=>{if("serviceWorker"in navigator)navigator.serviceWorker.register("/sw.js").catch(()=>{});},[]);useEffect(()=>{if(tab==="lucy")endRef.current?.scrollIntoView({behavior:"smooth"});},[data.messages,tab]);
+ const go=(next:Tab)=>{if(next===tab)return;setHistory(h=>[...h,tab]);setTab(next);};const back=()=>{const prev=history.at(-1)??"mas";setHistory(h=>h.slice(0,-1));setTab(prev);};
+ async function mutate(action:()=>Promise<unknown>,success="Guardado correctamente."){try{await action();await load();setNotice(success);}catch(e:any){setNotice(e?.message||"No se pudo completar la acción.");}}
+ async function send(){const content=text.trim();if(!content||sending)return;setText("");setSending(true);setData(d=>({...d,messages:[...d.messages,{id:"temp",role:"user",content}]}));try{await lucyData.post({content});await load();}catch{setNotice("No pude guardar el mensaje. Tu texto sigue aquí.");setText(content);}finally{setSending(false);}}
+ function voice(){const w=window as any,Recognition=w.SpeechRecognition||w.webkitSpeechRecognition;if(!Recognition){setNotice("El dictado no está disponible en este navegador.");return;}const r=new Recognition();r.lang="es-BO";r.interimResults=false;r.onstart=()=>setListening(true);r.onend=()=>setListening(false);r.onerror=()=>setListening(false);r.onresult=(e:any)=>setText(v=>`${v} ${e.results[0][0].transcript}`.trim());r.start();}
+ const secondary=!mainTabs.some(x=>x.id===tab)&&tab!=="mas";
+ return <main className="app-shell"><div className="ambient ambient-one"/><div className="ambient ambient-two"/><section className="phone"><Header tab={tab} back={secondary?back:undefined} menu={()=>go("mas")}/><div className="content">{loading?<Loading/>:<>
+  {tab==="lucy"&&<Chat messages={data.messages} name={(data.profile?.display_name||user.name||"Mauro").split(" ")[0]} text={text} setText={setText} send={send} voice={voice} listening={listening} sending={sending} endRef={endRef} go={go}/>} 
+  {tab==="diario"&&<Journal entries={data.entries}/>} 
+  {tab==="objetivos"&&<Goals goals={data.goals} mutate={mutate}/>} 
+  {tab==="suenos"&&<Dreams dreams={data.dreams} interpretations={data.interpretations} mutate={mutate}/>} 
+  {tab==="memoria"&&<Memory memories={data.memories} mutate={mutate}/>} 
+  {tab==="vida"&&<Life data={data}/>} 
+  {tab==="finanzas"&&<Finances observations={data.observations} mutate={mutate}/>} 
+  {tab==="perfil"&&<Profile user={user} profile={data.profile} mutate={mutate} signOut={onSignOut}/>} 
+  {tab==="mas"&&<More go={go}/>} 
+ </>}</div><nav className="bottom-nav" aria-label="Navegación principal">{mainTabs.map(item=><button key={item.id} onClick={()=>{setHistory([]);setTab(item.id)}} className={(tab===item.id||(item.id==="mas"&&secondary))?"active":""}><item.icon/><span>{item.label}</span></button>)}</nav></section>{notice&&<div className="toast">{notice}<button onClick={()=>setNotice("")} aria-label="Cerrar aviso"><X/></button></div>}</main>;
 }
 
-export default function LucyApp({ user, onSignOut }: { user: { name: string; email: string }; onSignOut: () => Promise<unknown> }) {
-  const [tab, setTab] = useState<Tab>("lucy");
-  const [data, setData] = useState<Data>(EMPTY);
-  const [text, setText] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
-  const [modal, setModal] = useState<"dream" | "goal" | null>(null);
-  const [notice, setNotice] = useState("");
-  const [listening, setListening] = useState(false);
-  const endRef = useRef<HTMLDivElement>(null);
+function Header({tab,back,menu}:{tab:Tab;back?:()=>void;menu:()=>void}){const[title,subtitle]=titles[tab];const Icon=tab==="suenos"?Moon:tab==="diario"?BookOpen:tab==="memoria"?Brain:tab==="objetivos"?Target:tab==="vida"?TrendingUp:tab==="finanzas"?WalletCards:tab==="perfil"?CircleUserRound:tab==="mas"?Menu:Feather;return <header className="topbar"><button className="brand-icon" onClick={back} disabled={!back} aria-label={back?"Volver":title}>{back?<ArrowLeft/>:<Icon/>}</button><div><h1>{title}{tab==="lucy"&&<i/>}</h1><p>{subtitle}</p></div><button className="icon-button" onClick={menu} aria-label="Abrir menú"><Ellipsis/></button></header>}
+function Loading(){return <div className="loading"><span/><span/><span/><p>Lucy está preparando tu espacio…</p></div>};function Empty({icon:Icon,title,text}:any){return <div className="empty"><span><Icon/></span><h3>{title}</h3><p>{text}</p></div>}
+function Chat({messages,name,text,setText,send,voice,listening,sending,endRef,go}:any){return <div className="chat"><div className="day-label">HOY</div>{messages.length===0&&<div className="lucy-message"><div className="avatar">L</div><div className="bubble assistant"><b>Hola, {name} ✦</b><br/>¿Cómo estuvo tu día? Estoy aquí para escucharte.</div></div>}{messages.map((m:any)=>m.role==="user"?<div className="bubble user" key={m.id}>{m.content}</div>:<div className="lucy-message" key={m.id}><div className="avatar">L</div><div className="bubble assistant">{m.content}</div></div>)}{sending&&<div className="lucy-message"><div className="avatar">L</div><div className="bubble assistant typing"><i/><i/><i/></div></div>}<div ref={endRef}/><div className="quick-links"><button onClick={()=>go("diario")}><BookOpen/> Diario</button><button onClick={()=>go("objetivos")}><Target/> Objetivos</button><button onClick={()=>go("finanzas")}><WalletCards/> Finanzas</button></div><div className="composer"><textarea value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}} placeholder="Cuéntame cómo estuvo tu día…" rows={1}/><button className={listening?"mic listening":"mic"} onClick={voice} aria-label="Dictar mensaje"><Mic/></button><button className="send" onClick={send} disabled={!text.trim()||sending} aria-label="Enviar"><Send/></button></div><p className="privacy-line"><LockKeyhole/> Privado. Solo tú puedes ver este espacio.</p></div>}
+function Journal({entries}:{entries:any[]}){return <div className="stack">{entries.length===0?<Empty icon={BookOpen} title="Tu historia empieza aquí" text="Lo que le cuentes a Lucy aparecerá en orden cronológico, conservando tus palabras."/>:entries.map((e,i)=><article className="story-card" key={e.id}><div className={`story-cover cover-${i%3}`}><span>{prettyDate(e.entry_date)}</span></div><div><h3>{e.summary||"Un momento de tu día"}</h3><p>{e.original_content}</p><div className="tags"><span><Heart/> Registro original</span></div></div></article>)}</div>}
 
-  const load = useCallback(async () => {
-    try {
-      setData(await lucyData.load());
-    } catch { setNotice("No pude cargar tus registros. Intenta nuevamente."); }
-    finally { setLoading(false); }
-  }, []);
-  useEffect(() => { void load(); }, [load]);
-  useEffect(() => { if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {}); }, []);
-  useEffect(() => { if (tab === "lucy") endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [data.messages, tab]);
+function Goals({goals,mutate}:any){const[filter,setFilter]=useState<"all"|"goal"|"task">("all"),[editing,setEditing]=useState<any>(null),[create,setCreate]=useState(false);const shown=goals.filter((g:any)=>filter==="all"||g.kind===filter);return <div className="stack"><Segment options={[["all","Todos"],["goal","Objetivos"],["task","Pendientes"]]} value={filter} set={setFilter}/>{shown.length===0?<Empty icon={Target} title="Sin registros en este filtro" text="Crea un objetivo o un pendiente."/>:shown.map((g:any)=><article className={`goal-row ${g.status==="done"?"done":""}`} key={g.id}><button className="check" onClick={()=>mutate(()=>lucyData.toggleGoal(g.id,g.status),g.status==="done"?"Reactivado.":"Completado.")} aria-label={g.status==="done"?"Reactivar":"Completar"}>{g.status==="done"?<Check/>:null}</button><div><h3>{g.title}</h3><p>{g.kind==="goal"?"Objetivo":"Pendiente"}{g.due_date?` · ${prettyDate(g.due_date)}`:""}</p></div><button className="row-action" onClick={()=>setEditing(g)} aria-label="Editar"><Pencil/></button><button className="row-action danger" onClick={()=>confirm("¿Eliminar este registro?")&&mutate(()=>lucyData.deleteGoal(g.id),"Eliminado.")} aria-label="Eliminar"><Trash2/></button></article>)}<button className="primary-wide" onClick={()=>setCreate(true)}><Plus/> Nuevo objetivo o pendiente</button>{(create||editing)&&<GoalModal item={editing} close={()=>{setCreate(false);setEditing(null)}} save={(v:any)=>mutate(()=>editing?lucyData.updateGoal(editing.id,v):lucyData.createGoal(v)).then(()=>{setCreate(false);setEditing(null)})}/>}</div>}
+function GoalModal({item,close,save}:any){const[title,setTitle]=useState(item?.title||""),[kind,setKind]=useState(item?.kind||"goal"),[date,setDate]=useState(item?.due_date||"");return <Modal close={close} title={item?"Editar registro":"Nuevo registro"}><label>Tipo<select value={kind} onChange={e=>setKind(e.target.value)}><option value="goal">Objetivo</option><option value="task">Pendiente</option></select></label><label>Descripción<input value={title} onChange={e=>setTitle(e.target.value)}/></label><label>Fecha opcional<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><button className="primary-wide" disabled={!title.trim()} onClick={()=>save({title:title.trim(),kind,due_date:date||null})}>Guardar</button></Modal>}
 
-  async function post(payload: any) {
-    await lucyData.post(payload);
-    await load();
-  }
-  async function send() {
-    const content = text.trim();
-    if (!content || sending) return;
-    setText(""); setSending(true);
-    setData(d => ({ ...d, messages: [...d.messages, { id: "temp", role: "user", content }] }));
-    try { await post({ content }); } catch { setNotice("No pude guardar el mensaje. Tu texto sigue aquí."); setText(content); }
-    finally { setSending(false); }
-  }
-  function voice() {
-    const w = window as any;
-    const Recognition = w.SpeechRecognition || w.webkitSpeechRecognition;
-    if (!Recognition) { setNotice("El dictado no está disponible en este navegador."); return; }
-    const recognition = new Recognition();
-    recognition.lang = "es-BO"; recognition.interimResults = false;
-    recognition.onstart = () => setListening(true);
-    recognition.onend = () => setListening(false);
-    recognition.onerror = () => setListening(false);
-    recognition.onresult = (event: any) => setText((v) => `${v} ${event.results[0][0].transcript}`.trim());
-    recognition.start();
-  }
-  useEffect(() => {
-    const context = (document as any).modelContext;
-    if (!context?.registerTool) return;
-    const controller = new AbortController();
-    const register = (name: string, description: string, action?: string) => context.registerTool({
-      name, title: description, description,
-      inputSchema: { type: "object", properties: { content: { type: "string", description: "Texto original expresado por la persona" } }, required: ["content"], additionalProperties: false },
-      annotations: { readOnlyHint: false, untrustedContentHint: false },
-      execute: async ({ content }: { content: string }) => { await post(action ? { action, content } : { content }); return { saved: true }; }
-    }, { signal: controller.signal });
-    Promise.all([register("record_life_note", "Guardar un relato en Lucy"), register("register_dream", "Registrar un sueño", "dream")]).catch(() => {});
-    return () => controller.abort();
-  }, [load]);
+function Dreams({dreams,interpretations,mutate}:any){const[edit,setEdit]=useState<any>(null),[create,setCreate]=useState(false);return <div className="stack"><section className="dream-hero"><div className="moon-art"><CloudMoon/></div><p>Cada sueño también cuenta una historia.</p><button onClick={()=>setCreate(true)}>Registrar un sueño <Plus/></button></section>{dreams.length===0?<Empty icon={Moon} title="Aún no hay sueños" text="Registra lo que recuerdes, aunque sean fragmentos."/>:dreams.map((d:any)=>{const interpretation=interpretations.find((i:any)=>i.dream_id===d.id);return <article className="dream-card" key={d.id}><div className="dream-row"><span className="dream-thumb"><Moon/></span><div><h3>{d.title||"Sueño sin título"}</h3><p>{prettyDate(d.dream_date)} · Relato original</p><small>{d.original_content}</small></div><button onClick={()=>setEdit(d)} aria-label="Editar"><Pencil/></button><button onClick={()=>confirm("¿Eliminar este sueño y su interpretación asociada?")&&mutate(()=>lucyData.deleteDream(d.id),"Sueño eliminado.")} aria-label="Eliminar"><Trash2/></button></div>{interpretation&&<div className="interpretation"><b>Interpretación asistida · hipótesis, no hecho</b><p>{interpretation.content}</p></div>}</article>})}<div className="info-note"><Lightbulb/><p><b>Interpretación responsable</b><br/>Las futuras interpretaciones se mostrarán como posibilidades, nunca como predicciones o hechos.</p></div>{(create||edit)&&<DreamModal item={edit} close={()=>{setCreate(false);setEdit(null)}} save={(v:any)=>mutate(()=>edit?lucyData.updateDream(edit.id,v):lucyData.createDream(v)).then(()=>{setCreate(false);setEdit(null)})}/>}</div>}
+function DreamModal({item,close,save}:any){const[title,setTitle]=useState(item?.title||""),[content,setContent]=useState(item?.original_content||""),[date,setDate]=useState(item?.dream_date||today());return <Modal close={close} title={item?"Editar sueño":"Registrar sueño"}><label>Título<input value={title} onChange={e=>setTitle(e.target.value)}/></label><label>Fecha<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><label>Relato original<textarea rows={6} value={content} onChange={e=>setContent(e.target.value)}/></label><button className="primary-wide" disabled={!content.trim()} onClick={()=>save({title:title.trim()||"Sueño sin título",original_content:content.trim(),dream_date:date})}>Guardar</button></Modal>}
 
-  const totalExpense = useMemo(() => data.observations.filter(o => o.type === "expense").reduce((sum, o) => {
-    const metadata = typeof o.metadata === "string" ? JSON.parse(o.metadata || "{}") : (o.metadata || {});
-    return sum + (metadata.amount || 0);
-  }, 0), [data.observations]);
-  const changeTab = (next: Tab) => setTab(next === "mas" ? "mas" : next);
-  const firstName = (user.name || "Mauro").split(" ")[0];
+function Memory({memories,mutate}:any){const[category,setCategory]=useState("about"),[edit,setEdit]=useState<any>(null),[create,setCreate]=useState(false);const normalize=(c:string)=>c==="person"||c==="people"?"people":c==="context"?"context":"about";const shown=memories.filter((m:any)=>normalize(m.category)===category);return <div className="stack"><Segment options={[["about","Sobre ti"],["people","Personas"],["context","Contexto"]]} value={category} set={setCategory}/>{shown.length===0?<Empty icon={Brain} title="Sin memorias en esta sección" text="Puedes guardar únicamente información que quieras revisar y corregir."/>:shown.map((m:any)=><article className="memory-card" key={m.id}><span><Brain/></span><div><h3>{category==="people"?"Persona":category==="context"?"Contexto":"Sobre ti"}</h3><p>{m.content}</p></div><button className="row-action" onClick={()=>setEdit(m)} aria-label="Editar"><Pencil/></button><button className="row-action danger" onClick={()=>confirm("¿Eliminar esta memoria?")&&mutate(()=>lucyData.deleteMemory(m.id),"Memoria eliminada.")} aria-label="Eliminar"><Trash2/></button></article>)}<button className="primary-wide" onClick={()=>setCreate(true)}><Plus/> Nueva memoria</button><blockquote>“Tu historia te pertenece. Lucy solo conserva lo que puedes revisar.”</blockquote>{(create||edit)&&<MemoryModal item={edit} category={category} close={()=>{setCreate(false);setEdit(null)}} save={(v:any)=>mutate(()=>edit?lucyData.updateMemory(edit.id,v):lucyData.createMemory(v)).then(()=>{setCreate(false);setEdit(null)})}/>}</div>}
+function MemoryModal({item,category,close,save}:any){const[content,setContent]=useState(item?.content||""),[kind,setKind]=useState(item?.category||category);return <Modal close={close} title={item?"Editar memoria":"Nueva memoria"}><label>Sección<select value={kind} onChange={e=>setKind(e.target.value)}><option value="about">Sobre ti</option><option value="people">Personas</option><option value="context">Contexto</option></select></label><label>Contenido<textarea rows={5} value={content} onChange={e=>setContent(e.target.value)}/></label><button className="primary-wide" disabled={!content.trim()} onClick={()=>save({content:content.trim(),category:kind})}>Guardar</button></Modal>}
 
-  return (
-    <main className="app-shell">
-      <div className="ambient ambient-one" /><div className="ambient ambient-two" />
-      <section className="phone">
-        <Header tab={tab} onMenu={() => setTab("mas")} />
-        <div className="content">
-          {loading ? <Loading /> : <>
-            {tab === "lucy" && <Chat messages={data.messages} name={firstName} text={text} setText={setText} send={send} voice={voice} listening={listening} sending={sending} endRef={endRef} go={setTab} />}
-            {tab === "diario" && <Journal entries={data.entries} />}
-            {tab === "suenos" && <Dreams dreams={data.dreams} open={() => setModal("dream")} remove={async (id: string) => { await lucyData.removeDream(id); await load(); }} />}
-            {tab === "memoria" && <Memory memories={data.memories} observations={data.observations} />}
-            {tab === "objetivos" && <Goals goals={data.goals} open={() => setModal("goal")} toggle={async (g: { id: string; status: string }) => { await lucyData.toggleGoal(g.id,g.status); await load(); }} />}
-            {tab === "vida" && <Life data={data} totalExpense={totalExpense} />}
-            {tab === "perfil" && <Profile user={user} signOut={onSignOut} />}
-            {tab === "mas" && <More go={setTab} />}
-          </>}
-        </div>
-        <nav className="bottom-nav" aria-label="Navegación principal">
-          {tabs.map(item => <button key={item.id} onClick={() => changeTab(item.id)} className={(tab === item.id || (item.id === "mas" && ["memoria","objetivos","perfil"].includes(tab))) ? "active" : ""}><item.icon /><span>{item.label}</span></button>)}
-        </nav>
-      </section>
-      {modal && <QuickModal kind={modal} close={() => setModal(null)} save={async (content: string) => { await post({ action: modal, content, kind: modal === "goal" ? "goal" : undefined }); setModal(null); }} />}
-      {notice && <div className="toast">{notice}<button onClick={() => setNotice("")}><X /></button></div>}
-    </main>
-  );
-}
+function PeriodTabs({period,setPeriod}:{period:Period;setPeriod:(p:Period)=>void}){return <Segment options={[["week","Semana"],["month","Mes"],["year","Año"]]} value={period} set={setPeriod}/>}
+function Life({data}:{data:LucyDataSet}){const[period,setPeriod]=useState<Period>("month");const entries=data.entries.filter(e=>inPeriod(e.entry_date,period)),goals=data.goals.filter(g=>inPeriod(g.created_at,period)),dreams=data.dreams.filter(d=>inPeriod(d.dream_date,period)),obs=data.observations.filter(o=>inPeriod(o.observed_at,period)),fin=obs.filter(o=>o.type==="expense"||o.type==="income"),expense=fin.filter(o=>o.type==="expense").reduce((s,o)=>s+Number(metadata(o).amount||0),0),emotions=obs.filter(o=>o.type==="emotion_reported");const counts=[entries.length,goals.length,dreams.length,fin.length],max=Math.max(1,...counts);return <div className="stack"><PeriodTabs period={period} setPeriod={setPeriod}/><p className="eyebrow">RESUMEN REAL DEL PERÍODO</p><div className="metric-grid"><Metric icon={BookOpen} value={entries.length} label="Registros de diario"/><Metric icon={Heart} value={emotions.length} label="Emociones reportadas"/><Metric icon={Target} value={goals.filter(g=>g.status==="done").length} label="Completados"/><Metric icon={WalletCards} value={`Bs ${expense.toFixed(2)}`} label="Gastos"/></div><article className="insight-card"><Sparkles/><div><h3>Lectura responsable</h3><p>{entries.length>=7?`Hay ${entries.length} registros en este período. Lucy puede resumir frecuencias, pero no atribuye causas sin evidencia.`:"Todavía no hay suficientes registros para afirmar patrones. Sigue registrando y Lucy mostrará únicamente conteos reales."}</p></div></article><h2 className="subheading">Actividad registrada</h2>{["Diario","Objetivos","Sueños","Finanzas"].map((x,i)=><div className="bar-row" key={x}><span>{x}</span><i><b style={{width:`${counts[i]/max*100}%`}}/></i><em>{counts[i]}</em></div>)}</div>}
+function Metric({icon:Icon,value,label}:any){return <article className="metric"><Icon/><b>{value}</b><span>{label}</span></article>}
 
-function Header({ tab, onMenu }: { tab: Tab; onMenu: () => void }) {
-  const [title, subtitle] = titles[tab];
-  const Icon = tab === "suenos" ? Moon : tab === "diario" ? BookOpen : tab === "memoria" ? Brain : tab === "objetivos" ? Target : tab === "vida" ? TrendingUp : tab === "perfil" ? CircleUserRound : tab === "mas" ? Menu : Feather;
-  return <header className="topbar"><div className="brand-icon"><Icon /></div><div><h1>{title}{tab === "lucy" && <i />}</h1><p>{subtitle}</p></div><button className="icon-button" onClick={onMenu} aria-label="Abrir menú"><Ellipsis /></button></header>;
-}
-function Loading() { return <div className="loading"><span /><span /><span /><p>Lucy está preparando tu espacio…</p></div>; }
-function Empty({ icon: Icon, title, text }: any) { return <div className="empty"><span><Icon /></span><h3>{title}</h3><p>{text}</p></div>; }
+function Finances({observations,mutate}:any){const[period,setPeriod]=useState<Period>("month"),[type,setType]=useState("all"),[edit,setEdit]=useState<any>(null),[create,setCreate]=useState(false);const all=observations.filter((o:any)=>(o.type==="income"||o.type==="expense")&&inPeriod(o.observed_at,period)),shown=all.filter((o:any)=>type==="all"||o.type===type),income=all.filter((o:any)=>o.type==="income").reduce((s:number,o:any)=>s+Number(metadata(o).amount||0),0),expense=all.filter((o:any)=>o.type==="expense").reduce((s:number,o:any)=>s+Number(metadata(o).amount||0),0);return <div className="stack"><PeriodTabs period={period} setPeriod={setPeriod}/><div className="finance-summary"><Metric icon={TrendingUp} value={`Bs ${income.toFixed(2)}`} label="Ingresos"/><Metric icon={WalletCards} value={`Bs ${expense.toFixed(2)}`} label="Gastos"/><Metric icon={Sparkles} value={`Bs ${(income-expense).toFixed(2)}`} label="Balance"/></div><Segment options={[["all","Todos"],["income","Ingresos"],["expense","Gastos"]]} value={type} set={setType}/>{shown.length===0?<Empty icon={WalletCards} title="Sin movimientos" text="Registra un ingreso o gasto cotidiano."/>:shown.map((o:any)=>{const m=metadata(o);return <article className="transaction-row" key={o.id}><span className={o.type}>{o.type==="income"?"+":"−"}</span><div><h3>{m.description||o.value||"Movimiento"}</h3><p>{m.category||"Otros"} · {prettyDate(o.observed_at)}</p></div><b>{o.type==="income"?"+":"−"} Bs {Number(m.amount||0).toFixed(2)}</b><button onClick={()=>setEdit(o)} aria-label="Editar"><Pencil/></button><button onClick={()=>confirm("¿Eliminar este movimiento?")&&mutate(()=>lucyData.deleteTransaction(o.id),"Movimiento eliminado.")} aria-label="Eliminar"><Trash2/></button></article>})}<button className="primary-wide" onClick={()=>setCreate(true)}><Plus/> Registrar movimiento</button>{(create||edit)&&<TransactionModal item={edit} close={()=>{setCreate(false);setEdit(null)}} save={(v:any)=>mutate(()=>edit?lucyData.updateTransaction(edit.id,v):lucyData.createTransaction(v)).then(()=>{setCreate(false);setEdit(null)})}/>}</div>}
+function TransactionModal({item,close,save}:any){const m=metadata(item),[type,setType]=useState(item?.type||"expense"),[amount,setAmount]=useState(String(m.amount||"")),[category,setCategory]=useState(m.category||"Otros"),[description,setDescription]=useState(m.description||item?.value||""),[date,setDate]=useState(item?.observed_at?.slice(0,10)||today());return <Modal close={close} title={item?"Editar movimiento":"Nuevo movimiento"}><label>Tipo<select value={type} onChange={e=>setType(e.target.value)}><option value="expense">Gasto</option><option value="income">Ingreso</option></select></label><label>Monto en Bs<input type="number" min="0.01" step="0.01" value={amount} onChange={e=>setAmount(e.target.value)}/></label><label>Categoría<input value={category} onChange={e=>setCategory(e.target.value)}/></label><label>Descripción<input value={description} onChange={e=>setDescription(e.target.value)}/></label><label>Fecha<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><button className="primary-wide" disabled={!description.trim()||Number(amount)<=0} onClick={()=>save({type,amount:Number(amount),category:category.trim()||"Otros",description:description.trim(),date})}>Guardar</button></Modal>}
 
-function Chat({ messages, name, text, setText, send, voice, listening, sending, endRef, go }: any) {
-  return <div className="chat">
-    <div className="day-label">HOY</div>
-    {messages.length === 0 && <div className="lucy-message"><div className="avatar">L</div><div className="bubble assistant"><b>Hola, {name} ✦</b><br/>¿Cómo estuvo tu día? Puedes contarme algo grande o algo pequeño. Estoy aquí para escucharte.</div></div>}
-    {messages.map((m: any) => m.role === "user" ? <div className="bubble user" key={m.id}>{m.content}</div> : <div className="lucy-message" key={m.id}><div className="avatar">L</div><div className="bubble assistant">{m.content}</div></div>)}
-    {sending && <div className="lucy-message"><div className="avatar">L</div><div className="bubble assistant typing"><i/><i/><i/></div></div>}
-    <div ref={endRef} />
-    <div className="quick-links"><button onClick={() => go("diario")}><BookOpen/> Diario</button><button onClick={() => go("objetivos")}><Target/> Objetivos</button><button onClick={() => go("vida")}><WalletCards/> Finanzas</button></div>
-    <div className="composer"><textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }}} placeholder="Cuéntame cómo estuvo tu día…" rows={1}/><button className={listening ? "mic listening" : "mic"} onClick={voice} aria-label="Dictar mensaje"><Mic /></button><button className="send" onClick={send} disabled={!text.trim() || sending}><Send /></button></div>
-    <p className="privacy-line"><LockKeyhole/> Privado. Solo tú puedes ver este espacio.</p>
-  </div>;
-}
+function Profile({user,profile,mutate,signOut}:any){const[section,setSection]=useState<null|"info"|"preferences"|"privacy"|"notifications">(null),prefs=profile?.preferences||{};if(section)return <ProfileSection section={section} user={user} profile={profile} prefs={prefs} back={()=>setSection(null)} save={(name:string,p:Record<string,unknown>)=>mutate(()=>lucyData.saveProfile(name,p))}/>;return <div className="stack profile"><div className="profile-avatar">{(profile?.display_name||user.name||"U").slice(0,1).toUpperCase()}<i/></div><h2>{profile?.display_name||user.name||"Tu perfil"}</h2><p>{user.email}</p>{[["info",CircleUserRound,"Mi información"],["preferences",Settings,"Preferencias"],["privacy",LockKeyhole,"Privacidad y seguridad"],["notifications",Sparkles,"Notificaciones"]].map(([id,Icon,label]:any)=><button className="settings-row" key={id} onClick={()=>setSection(id)}><Icon/><span>{label}</span><ChevronRight/></button>)}<button className="signout" onClick={signOut}>Cerrar sesión</button></div>}
+function ProfileSection({section,user,profile,prefs,back,save}:any){const[name,setName]=useState(profile?.display_name||user.name||""),[local,setLocal]=useState({...prefs}),[permission,setPermission]=useState(typeof Notification!=="undefined"?Notification.permission:"unsupported");async function askPermission(){if(typeof Notification==="undefined"){setPermission("unsupported");return;}const result=await Notification.requestPermission();setPermission(result);if(result==="granted")setLocal((p:any)=>({...p,notifications_enabled:true}));}const commit=()=>save(name.trim()||user.name,local);return <div className="stack profile-section"><button className="inline-back" onClick={back}><ArrowLeft/> Volver a Perfil</button>{section==="info"&&<><h2>Mi información</h2><label>Nombre visible<input value={name} onChange={e=>setName(e.target.value)}/></label><label>Correo<input value={user.email} disabled/></label><button className="primary-wide" onClick={commit}>Guardar cambios</button></>}{section==="preferences"&&<><h2>Preferencias</h2><Toggle label="Respuestas breves" checked={Boolean(local.concise_responses)} set={(v:boolean)=>setLocal((p:any)=>({...p,concise_responses:v}))}/><Toggle label="Tono de acompañamiento" checked={local.coaching_tone!==false} set={(v:boolean)=>setLocal((p:any)=>({...p,coaching_tone:v}))}/><button className="primary-wide" onClick={commit}>Guardar preferencias</button></>}{section==="privacy"&&<><h2>Privacidad y seguridad</h2><div className="info-note"><LockKeyhole/><p><b>Datos privados por cuenta</b><br/>Tus registros están protegidos por RLS y solo tu usuario autenticado puede consultarlos.</p></div><p className="privacy-detail">Correo de acceso: {user.email}<br/>La sesión permanece en este dispositivo hasta que cierres sesión. Lucy no muestra claves, tokens ni información sensible.</p></>}{section==="notifications"&&<><h2>Notificaciones</h2><p className="privacy-detail">Estado técnico: <b>{permission==="granted"?"Permitidas":permission==="denied"?"Bloqueadas en el dispositivo":permission==="unsupported"?"No disponibles en este navegador":"Aún no solicitadas"}</b></p>{permission==="default"&&<button className="primary-wide" onClick={askPermission}>Solicitar permiso</button>}<Toggle label="Activar recordatorios" checked={permission==="granted"&&Boolean(local.notifications_enabled)} disabled={permission!=="granted"} set={(v:boolean)=>setLocal((p:any)=>({...p,notifications_enabled:v}))}/><Toggle label="¿Cómo estuvo tu día?" checked={Boolean(local.daily_checkin)} disabled={permission!=="granted"} set={(v:boolean)=>setLocal((p:any)=>({...p,daily_checkin:v}))}/><label>Hora preferida<input type="time" value={local.reminder_time||"20:00"} disabled={permission!=="granted"} onChange={e=>setLocal((p:any)=>({...p,reminder_time:e.target.value}))}/></label><p className="privacy-detail">En iPhone, los avisos requieren Lucy instalada en la pantalla de inicio y permiso concedido. Esta versión guarda la preferencia; el envío programado remoto quedará inactivo hasta disponer de suscripción push.</p><button className="primary-wide" disabled={permission!=="granted"} onClick={commit}>Guardar configuración</button></>}</div>}
+function Toggle({label,checked,set,disabled=false}:any){return <label className={`toggle-row ${disabled?"disabled":""}`}><span>{label}</span><input type="checkbox" checked={checked} disabled={disabled} onChange={e=>set(e.target.checked)}/></label>}
 
-function Journal({ entries }: { entries: any[] }) {
-  return <div className="stack"><div className="date-strip">{["Lun","Mar","Mié","Jue","Vie"].map((d,i)=><div className={i===1?"selected":""} key={d}><span>{d}</span><b>{14+i}</b></div>)}</div>
-    {entries.length === 0 ? <Empty icon={BookOpen} title="Tu historia empieza aquí" text="Lo que le cuentes a Lucy aparecerá en orden cronológico, conservando tus palabras."/> : entries.map((e,i)=><article className="story-card" key={e.id}><div className={"story-cover cover-"+(i%3)}><span>{prettyDate(e.entry_date)}</span></div><div><h3>{e.summary || "Un momento de tu día"}</h3><p>{e.original_content}</p><div className="tags"><span><Heart/> Registro original</span><span><Sparkles/> {e.entry_date}</span></div></div></article>)}
-  </div>;
-}
-
-function Dreams({ dreams, open, remove }: any) {
-  return <div className="stack"><section className="dream-hero"><div className="moon-art"><CloudMoon/></div><p>Cada sueño también cuenta una historia.</p><button onClick={open}>Registrar un sueño <Plus/></button></section>
-    <div className="section-head"><h2>Últimos sueños</h2><Search/></div>
-    {dreams.length === 0 ? <Empty icon={Moon} title="Aún no hay sueños" text="Registra lo que recuerdes, aunque sean fragmentos. La interpretación siempre quedará separada."/> : dreams.map((d:any)=><article className="dream-row" key={d.id}><span className="dream-thumb"><Moon/></span><div><h3>{d.title || "Sueño sin título"}</h3><p>{prettyDate(d.dream_date)} · Registro original</p><small>{d.original_content}</small></div><button onClick={()=>remove(d.id)} aria-label="Eliminar sueño"><Trash2/></button></article>)}
-    <div className="info-note"><Lightbulb/><p><b>Interpretación responsable</b><br/>Lucy podrá ayudarte a explorar símbolos como posibilidades, nunca como predicciones o diagnósticos.</p></div>
-  </div>;
-}
-
-function Memory({ memories, observations }: any) {
-  const items = [...memories.map((m:any)=>({ title:m.category, text:m.content, icon:Brain })), ...observations.slice(0,8).map((o:any)=>({ title:o.type.replace("_"," "), text:o.value, icon:o.type.includes("emotion")?Heart:o.type.includes("expense")?WalletCards:Sparkles }))];
-  return <div className="stack"><div className="segmented"><button className="on">Sobre ti</button><button>Personas</button><button>Contexto</button></div>
-    {items.length === 0 ? <Empty icon={Brain} title="Lucy aprenderá contigo" text="Aquí podrás revisar, corregir y eliminar aquello que Lucy conserve a largo plazo."/> : items.map((m:any,i:number)=><article className="memory-card" key={i}><span><m.icon/></span><div><h3>{m.title}</h3><p>{m.text}</p></div><ChevronRight/></article>)}
-    <blockquote>“Tu historia te pertenece. Lucy solo conserva lo que puedes revisar.”</blockquote>
-  </div>;
-}
-
-function Goals({ goals, open, toggle }: any) {
-  return <div className="stack"><div className="segmented"><button className="on">Todos</button><button>Objetivos</button><button>Pendientes</button></div>
-    {goals.length === 0 ? <Empty icon={Target} title="Convierte intención en avance" text="Agrega un objetivo o cuéntale a Lucy algo que debes recordar."/> : goals.map((g:any)=><button className={"goal-row "+(g.status==="done"?"done":"")} onClick={()=>toggle(g)} key={g.id}><span className="check">{g.status==="done"?<Check/>:null}</span><div><h3>{g.title}</h3><p>{g.kind === "goal" ? "Objetivo" : "Pendiente"} · {prettyDate(g.created_at)}</p></div></button>)}
-    <button className="primary-wide" onClick={open}><Plus/> Nuevo objetivo</button>
-  </div>;
-}
-
-function Life({ data, totalExpense }: { data: Data; totalExpense: number }) {
-  const emotions = data.observations.filter(o=>o.type==="emotion_reported");
-  const completed = data.goals.filter(g=>g.status==="done").length;
-  return <div className="stack"><div className="segmented"><button>Semana</button><button className="on">Mes</button><button>Año</button></div><p className="eyebrow">TU MES EN RESUMEN</p>
-    <div className="metric-grid"><Metric icon={BookOpen} value={data.entries.length} label="Días registrados"/><Metric icon={Heart} value={emotions.length} label="Estados expresados"/><Metric icon={Target} value={completed} label="Tareas completadas"/><Metric icon={WalletCards} value={`Bs ${totalExpense.toFixed(0)}`} label="Gastos registrados"/></div>
-    <article className="insight-card"><Sparkles/><div><h3>Una lectura cuidadosa</h3><p>{data.entries.length ? `Ya tienes ${data.entries.length} momentos guardados. Con más tiempo, Lucy podrá comparar semanas sin confundir coincidencias con causas.` : "Empieza contando tu día. Los patrones aparecerán solo cuando exista suficiente historia real."}</p></div></article>
-    <h2 className="subheading">Temas registrados</h2>{["Diario","Objetivos","Sueños","Finanzas"].map((x,i)=><div className="bar-row" key={x}><span>{x}</span><i><b style={{width:`${[72,46,34,58][i]}%`}}/></i><em>{[data.entries.length,data.goals.length,data.dreams.length,data.observations.filter(o=>o.type==="expense").length][i]}</em></div>)}
-  </div>;
-}
-function Metric({ icon:Icon, value, label }: any) { return <article className="metric"><Icon/><b>{value}</b><span>{label}</span></article>; }
-
-function Profile({ user, signOut }: any) {
-  return <div className="stack profile"><div className="profile-avatar">{(user.name||"U").slice(0,1).toUpperCase()}<i/></div><h2>{user.name || "Tu perfil"}</h2><p>{user.email}</p>{[[CircleUserRound,"Mi información"],[Settings,"Preferencias"],[LockKeyhole,"Privacidad y seguridad"],[Sparkles,"Notificaciones"]].map(([Icon,label]:any)=><button className="settings-row" key={label}><Icon/><span>{label}</span><ChevronRight/></button>)}<button className="signout" onClick={signOut}>Cerrar sesión</button></div>;
-}
-function More({ go }: { go: (t:Tab)=>void }) {
-  return <div className="stack menu-list">{[[Sparkles,"Mi vida","Tu historia en contexto","vida"],[Target,"Objetivos","Rutinas y seguimiento","objetivos"],[Brain,"Memoria","Lo que Lucy recuerda","memoria"],[Moon,"Interpretación de sueños","Próximamente","suenos"],[CircleUserRound,"Perfil y privacidad","Tu cuenta y preferencias","perfil"]].map(([Icon,title,sub,id]:any)=><button key={title} onClick={()=>go(id)}><span><Icon/></span><div><h3>{title}</h3><p>{sub}</p></div><ChevronRight/></button>)}<div className="orionix">Creado por <b>Orionix-AI</b><small>www.orionix-ai.com</small></div></div>;
-}
-function QuickModal({ kind, close, save }: any) {
-  const [value,setValue]=useState("");
-  return <div className="modal-backdrop" onMouseDown={close}><div className="modal" onMouseDown={e=>e.stopPropagation()}><button className="modal-close" onClick={close}><X/></button><span className="modal-icon">{kind==="dream"?<Moon/>:<Target/>}</span><h2>{kind==="dream"?"Registrar un sueño":"Nuevo objetivo"}</h2><p>{kind==="dream"?"Escribe lo que recuerdes. Guardaremos el relato original sin interpretarlo.":"¿Qué quieres lograr o recordar?"}</p><textarea autoFocus value={value} onChange={e=>setValue(e.target.value)} placeholder={kind==="dream"?"Anoche soñé que…":"Quiero…"} rows={6}/><button className="primary-wide" disabled={!value.trim()} onClick={()=>save(value)}>{kind==="dream"?"Guardar sueño":"Guardar objetivo"}</button></div></div>;
-}
+function More({go}:{go:(t:Tab)=>void}){return <div className="stack menu-list">{[[Sparkles,"Mi vida","Tu historia en contexto","vida"],[Target,"Objetivos","Rutinas y seguimiento","objetivos"],[Brain,"Memoria","Lo que Lucy recuerda","memoria"],[Moon,"Sueños","Relatos e interpretaciones separadas","suenos"],[WalletCards,"Finanzas","Ingresos y gastos cotidianos","finanzas"],[CircleUserRound,"Perfil y privacidad","Tu cuenta y preferencias","perfil"]].map(([Icon,title,sub,id]:any)=><button key={title} onClick={()=>go(id)}><span><Icon/></span><div><h3>{title}</h3><p>{sub}</p></div><ChevronRight/></button>)}<div className="orionix">Creado por <b>Orionix-AI</b><small>www.orionix-ai.com</small></div></div>}
+function Segment({options,value,set}:any){return <div className="segmented">{options.map(([id,label]:string[])=><button key={id} className={value===id?"on":""} onClick={()=>set(id)}>{label}</button>)}</div>}
+function Modal({close,title,children}:any){return <div className="modal-backdrop" onMouseDown={close}><div className="modal form-modal" onMouseDown={e=>e.stopPropagation()}><button className="modal-close" onClick={close} aria-label="Cerrar"><X/></button><h2>{title}</h2>{children}</div></div>}
