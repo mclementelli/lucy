@@ -15,5 +15,14 @@ self.addEventListener("fetch", event => {
 });
 self.addEventListener("push", event => {
   const data = event.data ? event.data.json() : { title: "Lucy", body: "¿Quieres contarme cómo estuvo tu día?" };
-  event.waitUntil(self.registration.showNotification(data.title || "Lucy", { body: data.body, icon: "/favicon.svg" }));
+  event.waitUntil(self.registration.showNotification(data.title || "Lucy", { body: data.body, icon: "/icon-192.png", badge: "/icon-192.png", data: { url: data.url || "/" } }));
+});
+self.addEventListener("notificationclick", event => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || "/", self.location.origin).href;
+  event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(clients => {
+    const existing = clients.find(client => client.url.startsWith(self.location.origin));
+    if (existing) return existing.focus().then(() => existing.navigate(target));
+    return self.clients.openWindow(target);
+  }));
 });
