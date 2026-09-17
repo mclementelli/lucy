@@ -12,17 +12,21 @@ export const SUPABASE_AUTH_OPTIONS = Object.freeze({
   storageKey: "orionix-lucy-auth",
 });
 export const FUTURE_AUTH_CAPABILITIES = Object.freeze({
-  passkeys: false,
-  webauthn: false,
-  deviceBiometrics: false,
+  passkeys: true,
+  webauthn: true,
+  deviceBiometrics: true,
 });
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: SUPABASE_AUTH_OPTIONS,
 });
 
-let restorePromise: ReturnType<typeof supabase.auth.getSession> | undefined;
-export function restoreStoredSession() {
-  restorePromise ??= supabase.auth.getSession();
-  return restorePromise;
+export async function restoreStoredSession() {
+  const current = await supabase.auth.getSession();
+  if (current.error || !current.data.session) return current;
+  const expiresAt = current.data.session.expires_at ?? 0;
+  if (expiresAt * 1000 - Date.now() < 90_000) {
+    return supabase.auth.refreshSession(current.data.session);
+  }
+  return current;
 }
