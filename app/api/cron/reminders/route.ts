@@ -4,9 +4,13 @@ import { SUPABASE_URL } from "../../../supabase";
 
 export const runtime = "nodejs";
 
-function localTime(timezone: string) {
-  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date());
-  return Object.fromEntries(parts.map((part) => [part.type, part.value]));
+function localDate(timezone: string, date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
 }
 
 export async function GET(request: Request) {
@@ -23,12 +27,10 @@ export async function GET(request: Request) {
   if (error) return Response.json({ error: error.message }, { status: 500 });
   let sent = 0;
   for (const row of data ?? []) {
-    const now = localTime(row.timezone || "UTC");
-    const [targetHour, targetMinute] = String(row.reminder_time).split(":").map(Number);
-    const current = Number(now.hour) * 60 + Number(now.minute);
-    const target = targetHour * 60 + targetMinute;
-    const recentlySent = row.last_sent_at && Date.now() - new Date(row.last_sent_at).getTime() < 20 * 60 * 60 * 1000;
-    if (current < target || current >= target + 15 || recentlySent) continue;
+    const timezone = row.timezone || "America/La_Paz";
+    const today = localDate(timezone);
+    const alreadySentToday = row.last_sent_at && localDate(timezone, new Date(row.last_sent_at)) === today;
+    if (alreadySentToday) continue;
     try {
       await webpush.sendNotification(row.subscription, JSON.stringify({ title: "Lucy", body: "¿Cómo estuvo tu día? Cuéntaselo a Lucy.", url: "/" }));
       await admin.from("lucy_push_subscriptions").update({ last_sent_at: new Date().toISOString() }).eq("id", row.id);
@@ -38,5 +40,5 @@ export async function GET(request: Request) {
       if (statusCode === 404 || statusCode === 410) await admin.from("lucy_push_subscriptions").delete().eq("id", row.id);
     }
   }
-  return Response.json({ checked: data?.length ?? 0, sent });
+  return Response.json({ checked: data?.length ?? 0, sent, cadence: "daily-hobby" });
 }
